@@ -1,14 +1,12 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"regexp"
 	"strconv"
 	"sync"
@@ -18,44 +16,62 @@ const (
 	GONGYINGSHANG = "供应商</dt>\n          <dd class=\"information-list__item__definition\">([^<]+)</dd>"
 )
 
-func main() {
-	var numbers int
-	flag.IntVar(&numbers, "num", 100, "数量")
+type Config struct {
+	Name  string
+	Regex string
+}
 
-	var wg sync.WaitGroup
-	for i := 0; i < numbers; i++ {
-		wg.Add(1)
+type UrlInfo struct {
+	Numbers int
+	Url     string
+	Wg      *sync.WaitGroup
+	Config  []*Config
+}
+
+func NewUrlInfo(numbers int, url string) UrlInfo {
+	return UrlInfo{
+		Numbers: numbers,
+		Url:     url,
+		Wg:      &sync.WaitGroup{},
+		Config:  nil,
+	}
+}
+
+func main() {
+	var num int
+	var url string
+	flag.IntVar(&num, "num", 100, "数量")
+	flag.StringVar(&url, "url", "https://apps.apple.com/cn/app/id414478124", "链接")
+	info := NewUrlInfo(num, url)
+	info.Config = append(info.Config, NewConfig("供应商", GONGYINGSHANG))
+	info.run()
+	info.Wg.Wait()
+}
+
+func (info *UrlInfo) run() {
+
+	for i := 0; i < info.Numbers; i++ {
+		info.Wg.Add(1)
 		fmt.Printf("ADD" + strconv.Itoa(i))
 		go func(a int) {
-			defer wg.Done()
-			str, err := getContent("https://apps.apple.com/cn/app/id414478124")
+			defer info.Wg.Done()
+			str, err := getContent(info.Url)
 			if err != nil {
 				fmt.Printf(err.Error())
 				return
 			}
-			fmt.Printf("ADDxxA" + strconv.Itoa(a))
 
 			//fmt.Printf(str)
-			details, err := getDetails(str, GONGYINGSHANG)
-			if err != nil {
-				fmt.Printf(err.Error())
-				return
-			}
-			f, _ := os.OpenFile("a.txt", os.O_CREATE, 0666)
-			defer f.Close()
-
-			_, err = bufio.NewWriter(f).WriteString(strconv.Itoa(a) + ":" + details)
-
-			if err != nil {
-				fmt.Printf(err.Error())
-				return
+			for _, r := range info.Config {
+				s, e := r.GetDetails(str)
+				if e != nil {
+					fmt.Printf(e.Error())
+				}
+				fmt.Printf(s)
 			}
 
 		}(i)
 	}
-
-	wg.Wait()
-
 }
 
 func getContent(url string) ([]byte, error) {
@@ -86,12 +102,23 @@ func getContent(url string) ([]byte, error) {
 	return data, nil
 }
 
-func getDetails(content []byte, regex string) (string, error) {
-	match := regexp.MustCompile(regex)
+func NewConfig(name string, regex string) *Config {
+	return &Config{
+		Name:  name,
+		Regex: regex,
+	}
+}
+
+type Operation interface {
+	GetDetails(content []byte) (string, error)
+}
+
+func (cf *Config) GetDetails(content []byte) (string, error) {
+	match := regexp.MustCompile(cf.Regex)
 	matchData := match.FindAllSubmatch(content, -1)
 	//fmt.Println(matchData)
 	if matchData == nil {
 		return "", errors.New("无匹配")
 	}
-	return string(bytes.Trim(matchData[0][1], "")), nil
+	return fmt.Sprintf("%s:%s", cf.Name, string(bytes.Trim(matchData[0][1], ""))), nil
 }
