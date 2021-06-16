@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"regexp"
-	"strconv"
 	"sync"
 )
 
@@ -42,6 +41,7 @@ func main() {
 	var url string
 	flag.IntVar(&num, "num", 100, "数量")
 	flag.StringVar(&url, "url", "https://apps.apple.com/cn/app/id414478124", "链接")
+	flag.Parse()
 	info := NewUrlInfo(num, url)
 	info.Config = append(info.Config, NewConfig("供应商", GONGYINGSHANG))
 	info.run()
@@ -49,10 +49,10 @@ func main() {
 }
 
 func (info *UrlInfo) run() {
-
+	fmt.Printf("%v", info.Numbers)
 	for i := 0; i < info.Numbers; i++ {
 		info.Wg.Add(1)
-		fmt.Printf("ADD" + strconv.Itoa(i))
+		//fmt.Printf("ADD" + strconv.Itoa(i))
 		go func(a int) {
 			defer info.Wg.Done()
 			str, err := getContent(info.Url)
